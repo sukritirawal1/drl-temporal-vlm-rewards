@@ -1,6 +1,9 @@
 # drl-temporal-vlm-rewards
 Intermediate Reward Computation using VLMs for Reinforcement Learning
 
+My environment is a conda environment with Python 3.10.19. A later version of Python
+will likely still work, but thought I'd note this just in case.
+
 To run PPO baseline:
 python ppo.py --wandb_key [YOUR WANDB API KEY]
 
