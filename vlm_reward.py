@@ -2,6 +2,16 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import torch
+import sys
+import types
+import importlib.machinery
+
+if "tensorflow" not in sys.modules:
+    tf_stub = types.ModuleType("tensorflow")
+    tf_stub.__dict__["__version__"] = "0.0.0"  # avoid code that reads tf.__version__
+    tf_stub.__spec__ = importlib.machinery.ModuleSpec("tensorflow", loader=None)
+    sys.modules["tensorflow"] = tf_stub
+
 from transformers import CLIPProcessor, CLIPModel
 from PIL import Image
 import os
