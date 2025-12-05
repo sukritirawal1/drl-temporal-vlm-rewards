@@ -2,9 +2,11 @@ buffer==0.2.1
 gymnasium==1.2.2
 matplotlib==3.10.7
 minigrid==3.0.0
-numpy==2.2.6
+numpy
 pandas==2.3.3
 stable_baselines3==2.7.0
-torch==2.9.1
+# torch==2.9.1
 tqdm==4.67.1
 wandb
+transformers
+Pillow

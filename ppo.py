@@ -47,7 +47,7 @@ def make_env(log_dir):
         env = gym.make("MiniGrid-GoToObject-8x8-N2-v0", render_mode="rgb_array")
         env = ImgObsWrapper(env)  # Convert dict obs to image obs
         env = Monitor(env, log_dir)  # Monitor for logging
-        # env = CLIPRewardWrapper(env) # UNCOMMENT THIS TO ENABLE CUSTOM REWARDS
+        env = CLIPRewardWrapper(env) # UNCOMMENT THIS TO ENABLE CUSTOM REWARDS
         return env
     return _init
 
