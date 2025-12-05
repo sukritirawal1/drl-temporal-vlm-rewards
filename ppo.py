@@ -41,20 +41,22 @@ class MinigridFeaturesExtractor(BaseFeaturesExtractor):
         return self.linear(self.cnn(observations))
 
 # Reference: https://minigrid.farama.org/content/training/
-def make_env(log_dir):
+def make_env(log_dir, env_id, use_vlm=True):
     """Create and wrap the MiniGrid environment"""
     def _init():
-        env = gym.make("MiniGrid-GoToObject-8x8-N2-v0", render_mode="rgb_array")
+        env = gym.make(env_id, render_mode="rgb_array")
         env = ImgObsWrapper(env)  # Convert dict obs to image obs
         env = Monitor(env, log_dir)  # Monitor for logging
-        # env = CLIPRewardWrapper(env) # UNCOMMENT THIS TO ENABLE CUSTOM REWARDS
+        goal_prompt = "The agent has found the correct key and has made it to the same color door" if env_id == "MiniGrid-LockedRoom-v0" else "The agent has found the object"   
+        if use_vlm:
+            env = CLIPRewardWrapper(env, goal_prompt=goal_prompt) # UNCOMMENT THIS TO ENABLE CUSTOM REWARDS
         return env
     return _init
 
 
-def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_timesteps=250000):
+def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_timesteps=250000, env_id="MiniGrid-LockedRoom-v0", use_vlm=True):
     """
-    Train PPO agent on MiniGrid-GoToObject environment
+    Train PPO agent on MiniGrid environment with optional VLM-based reward shaping.
     
     Args:
         wandb_key: Weights & Biases API key (if None, will look for WANDB_API_KEY env var)
@@ -81,7 +83,7 @@ def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_time
     config = {
         "policy_type": "CnnPolicy",
         "total_timesteps": total_timesteps,
-        "env_name": "MiniGrid-GoToObject-8x8-N2-v0",
+        "env_name": env_id,
         "learning_rate": 3e-4,
         "n_steps": 2048,
         "batch_size": 256,
@@ -103,7 +105,7 @@ def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_time
     )
     
     # Create vectorized environment
-    env = DummyVecEnv([make_env(log_dir)])
+    env = DummyVecEnv([make_env(log_dir, env_id, use_vlm=use_vlm)])
     
     # Wrap with video recorder
     env = VecVideoRecorder(
@@ -114,7 +116,7 @@ def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_time
     )
     
     # Create evaluation environment
-    eval_env = DummyVecEnv([make_env(log_dir)])
+    eval_env = DummyVecEnv([make_env(log_dir, env_id, use_vlm=use_vlm)])
     
     # Define callbacks
     checkpoint_callback = CheckpointCallback(
@@ -187,7 +189,7 @@ def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_time
     
     # Record final demonstration videos
     print("\nRecording final demonstration video...")
-    video_env = gym.make("MiniGrid-GoToObject-8x8-N2-v0", render_mode="rgb_array")
+    video_env = gym.make(env_id, render_mode="rgb_array")
     video_env = ImgObsWrapper(video_env)
     video_env = gym.wrappers.RecordVideo(
         video_env,
@@ -241,7 +243,7 @@ def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_time
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train PPO on MiniGrid-GoToObject with W&B logging")
+    parser = argparse.ArgumentParser(description="Trainer for Temporal Delta Project")
     parser.add_argument("--wandb_key", type=str, default=None, 
                         help="Weights & Biases API key (or set WANDB_API_KEY env var)")
     parser.add_argument("--project", type=str, default="minigrid-ppo",
@@ -250,6 +252,10 @@ if __name__ == "__main__":
                         help="W&B run name (auto-generated if not provided)")
     parser.add_argument("--timesteps", type=int, default=250000,
                         help="Total training timesteps")
+    parser.add_argument("--env_id", type=str, default="MiniGrid-LockedRoom-v0",
+                        help="Minigrid Environment ID")
+    parser.add_argument("--use_VLM", action='store_true',
+                        help="Whether to use VLM-based reward shaping")
     
     args = parser.parse_args()
     
@@ -257,5 +263,7 @@ if __name__ == "__main__":
         wandb_key=args.wandb_key,
         project_name=args.project,
         run_name=args.run_name,
-        total_timesteps=args.timesteps
+        total_timesteps=args.timesteps,
+        env_id=args.env_id,
+        use_vlm=args.use_VLM,
     )
