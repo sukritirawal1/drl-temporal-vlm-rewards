@@ -47,7 +47,12 @@ def make_env(log_dir, env_id, use_vlm=True):
         env = gym.make(env_id, render_mode="rgb_array")
         env = ImgObsWrapper(env)  # Convert dict obs to image obs
         env = Monitor(env, log_dir)  # Monitor for logging
-        goal_prompt = "The agent has found the correct key and has made it to the same color door" if env_id == "MiniGrid-LockedRoom-v0" else "The agent has found the object"   
+        if env_id == "MiniGrid-LockedRoom-v0":
+            goal_prompt = "The agent has found the correct key and has made it to the same color door" 
+        elif env_id == "MiniGrid-DoorKey-8x8-v0":
+            goal_prompt = "The agent finds the key first, then opens the door, then reaches the goal behind the door"
+        else:
+            "The agent has found the object"   
         if use_vlm:
             env = CLIPRewardWrapper(env, goal_prompt=goal_prompt) # UNCOMMENT THIS TO ENABLE CUSTOM REWARDS
         return env
@@ -258,6 +263,8 @@ if __name__ == "__main__":
                         help="Whether to use VLM-based reward shaping")
     
     args = parser.parse_args()
+    
+    print("test")
     
     train(
         wandb_key=args.wandb_key,
