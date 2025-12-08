@@ -15,7 +15,10 @@ class CLIPRewardWrapper(gym.Wrapper):
                  goal_prompt: str = "A key is in the lock",
                  model_id: str = "openai/clip-vit-base-patch32",
                  embed_dim: int = 512,
-                 disabled_on_error: bool = True):
+                 disabled_on_error: bool = True,
+                 clip_weight: float = 0.5,
+                 positive_delta_only: bool = True,
+                 use_static_rewards: bool = False):
         super().__init__(env)
 
         self.model_id = model_id
@@ -26,6 +29,11 @@ class CLIPRewardWrapper(gym.Wrapper):
         self._loaded = False
         self._disabled = False
         self._disabled_on_error = disabled_on_error
+        
+        self.clip_weight = clip_weight
+        
+        self.positive_delta_only = positive_delta_only
+        self.use_static_rewards = use_static_rewards
 
         self.clip_sim_score_t_minus_1 = 0.0
         self._goal_features = None
@@ -109,6 +117,7 @@ class CLIPRewardWrapper(gym.Wrapper):
             info.setdefault("clip_sim_t", 0.0)
             info.setdefault("clip_sim_t-1", 0.0)
             info.setdefault("vlm_reward_delta", 0.0)
+            info.setdefault("vlm_reward", 0.0)
             info.setdefault("original_reward", original_reward)
             return obs, original_reward, terminated, truncated, info
 
@@ -120,13 +129,24 @@ class CLIPRewardWrapper(gym.Wrapper):
 
         clip_sim_score_t = self._calculate_similarity(current_obs_features)
         temporal_delta_reward = clip_sim_score_t - self.clip_sim_score_t_minus_1
+        
+        if self.use_static_rewards:
+            vlm_reward = clip_sim_score_t
+            
+        else:
+            vlm_reward = clip_sim_score_t - self.clip_sim_score_t_minus_1
+        if self.positive_delta_only:
+            vlm_reward = max(0.0, vlm_reward)
+        
+        weighted_vlm_reward = self.clip_weight * vlm_reward
+        new_reward = original_reward + weighted_vlm_reward
+        
         self.clip_sim_score_t_minus_1 = clip_sim_score_t
-
-        new_reward = temporal_delta_reward
         
         info.setdefault('clip_sim_t', clip_sim_score_t)
         info.setdefault('clip_sim_t-1', self.clip_sim_score_t_minus_1)
         info.setdefault('vlm_reward_delta', temporal_delta_reward)
+        info.setdefault('vlm_reward', vlm_reward)
         info.setdefault('original_reward', original_reward)
 
         if original_reward > 0 and 'is_success' not in info:

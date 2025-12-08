@@ -41,25 +41,25 @@ class MinigridFeaturesExtractor(BaseFeaturesExtractor):
         return self.linear(self.cnn(observations))
 
 # Reference: https://minigrid.farama.org/content/training/
-def make_env(log_dir, env_id, use_vlm=True):
+def make_env(log_dir, env_id, use_vlm=True, use_static_rewards=False, goal_prompt = None):
     """Create and wrap the MiniGrid environment"""
     def _init():
         env = gym.make(env_id, render_mode="rgb_array")
         env = ImgObsWrapper(env)  # Convert dict obs to image obs
         env = Monitor(env, log_dir)  # Monitor for logging
-        if env_id == "MiniGrid-LockedRoom-v0":
-            goal_prompt = "The agent has found the correct key and has made it to the same color door" 
-        elif env_id == "MiniGrid-DoorKey-8x8-v0":
-            goal_prompt = "The agent finds the key first, then opens the door, then reaches the goal behind the door"
-        else:
-            "The agent has found the object"   
+        # if env_id == "MiniGrid-LockedRoom-v0":
+        #     goal_prompt = "The agent has found the correct key and has made it to the same color door" 
+        # elif env_id == "MiniGrid-DoorKey-8x8-v0":
+        #     goal_prompt = "The agent finds the key first, then opens the door, then reaches the goal behind the door"
+        # else:
+        #     "The agent has found the object"   
         if use_vlm:
-            env = CLIPRewardWrapper(env, goal_prompt=goal_prompt) # UNCOMMENT THIS TO ENABLE CUSTOM REWARDS
+            env = CLIPRewardWrapper(env, goal_prompt=goal_prompt, use_static_rewards=use_static_rewards) # UNCOMMENT THIS TO ENABLE CUSTOM REWARDS
         return env
     return _init
 
 
-def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_timesteps=250000, env_id="MiniGrid-LockedRoom-v0", use_vlm=True):
+def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_timesteps=250000, env_id="MiniGrid-LockedRoom-v0", use_vlm=True, load_model = None, use_static_rewards=False, goal_prompt = None):
     """
     Train PPO agent on MiniGrid environment with optional VLM-based reward shaping.
     
@@ -110,7 +110,7 @@ def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_time
     )
     
     # Create vectorized environment
-    env = DummyVecEnv([make_env(log_dir, env_id, use_vlm=use_vlm)])
+    env = DummyVecEnv([make_env(log_dir, env_id, use_vlm=use_vlm, use_static_rewards=use_static_rewards, goal_prompt=goal_prompt)])
     
     # Wrap with video recorder
     env = VecVideoRecorder(
@@ -121,7 +121,7 @@ def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_time
     )
     
     # Create evaluation environment
-    eval_env = DummyVecEnv([make_env(log_dir, env_id, use_vlm=use_vlm)])
+    eval_env = DummyVecEnv([make_env(log_dir, env_id, use_vlm=use_vlm, use_static_rewards=use_static_rewards, goal_prompt=goal_prompt)])
     
     # Define callbacks
     checkpoint_callback = CheckpointCallback(
@@ -155,21 +155,30 @@ def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_time
         net_arch=dict(pi=[256, 256], vf=[256, 256])
     )
     
-    model = PPO(
-        "CnnPolicy",
-        env,
-        policy_kwargs=policy_kwargs,
-        verbose=1,
-        tensorboard_log=log_dir + "tensorboard/",
-        learning_rate=config["learning_rate"],
-        n_steps=config["n_steps"],
-        batch_size=config["batch_size"],
-        n_epochs=config["n_epochs"],
-        gamma=config["gamma"],
-        gae_lambda=config["gae_lambda"],
-        clip_range=config["clip_range"],
-        ent_coef=config["ent_coef"],
-    )
+    if load_model is not None:
+        print(f"Loading model from {load_model}")
+        model = PPO.load(load_model)
+        model.set_env(env)
+        reset_steps = False
+    
+    else:   
+        model = PPO(
+            "CnnPolicy",
+            env,
+            policy_kwargs=policy_kwargs,
+            verbose=1,
+            tensorboard_log=log_dir + "tensorboard/",
+            learning_rate=config["learning_rate"],
+            n_steps=config["n_steps"],
+            batch_size=config["batch_size"],
+            n_epochs=config["n_epochs"],
+            gamma=config["gamma"],
+            gae_lambda=config["gae_lambda"],
+            clip_range=config["clip_range"],
+            ent_coef=config["ent_coef"],
+        )
+        reset_steps = True
+        
     
     # Logging messages -------------------------------------------------
     print(f"Starting training...")
@@ -181,6 +190,7 @@ def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_time
     model.learn(
         total_timesteps=total_timesteps,
         callback=[checkpoint_callback, eval_callback, wandb_callback],
+        reset_num_timesteps=reset_steps,
         progress_bar=True
     )
     
@@ -261,10 +271,22 @@ if __name__ == "__main__":
                         help="Minigrid Environment ID")
     parser.add_argument("--use_VLM", action='store_true',
                         help="Whether to use VLM-based reward shaping")
+    parser.add_argument(
+        "--load_model",
+        type=str,
+        default=None,
+        help="Path to a saved SB3 model.zip to continue training."
+    )
+    parser.add_argument("--use_static_rewards", action='store_true',
+                        help="Whether to use static VLM rewards instead of temporal delta rewards")
+    
+    parser.add_argument("--goal_prompt", type=str, default="A top-down grid game where the agent has found the yellow key, unlocked the yellow door, and is standing on the green goal square.",
+                        help="Goal Text Prompt for CLIP")
+    
     
     args = parser.parse_args()
     
-    print("test")
+    print("test6")
     
     train(
         wandb_key=args.wandb_key,
@@ -273,4 +295,7 @@ if __name__ == "__main__":
         total_timesteps=args.timesteps,
         env_id=args.env_id,
         use_vlm=args.use_VLM,
+        load_model=args.load_model,
+        use_static_rewards=args.use_static_rewards,
+        goal_prompt = args.goal_prompt
     )
