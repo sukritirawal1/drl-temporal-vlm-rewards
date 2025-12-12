@@ -41,25 +41,19 @@ class MinigridFeaturesExtractor(BaseFeaturesExtractor):
         return self.linear(self.cnn(observations))
 
 # Reference: https://minigrid.farama.org/content/training/
-def make_env(log_dir, env_id, use_vlm=True):
+def make_env(log_dir, env_id, use_vlm=True, goal_prompt = "The agent finds the key first, then opens the door, then reaches the goal behind the door"):
     """Create and wrap the MiniGrid environment"""
     def _init():
         env = gym.make(env_id, render_mode="rgb_array")
         env = ImgObsWrapper(env)  # Convert dict obs to image obs
         env = Monitor(env, log_dir)  # Monitor for logging
-        if env_id == "MiniGrid-LockedRoom-v0":
-            goal_prompt = "The agent has found the correct key and has made it to the same color door" 
-        elif env_id == "MiniGrid-DoorKey-8x8-v0":
-            goal_prompt = "The agent finds the key first, then opens the door, then reaches the goal behind the door"
-        else:
-            "The agent has found the object"   
         if use_vlm:
             env = CLIPRewardWrapper(env, goal_prompt=goal_prompt) # UNCOMMENT THIS TO ENABLE CUSTOM REWARDS
         return env
     return _init
 
 
-def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_timesteps=250000, env_id="MiniGrid-LockedRoom-v0", use_vlm=True):
+def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_timesteps=250000, env_id="MiniGrid-LockedRoom-v0", use_vlm=True, goal_prompt = "The agent finds the key first, then opens the door, then reaches the goal behind the door"):
     """
     Train PPO agent on MiniGrid environment with optional VLM-based reward shaping.
     
@@ -110,7 +104,7 @@ def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_time
     )
     
     # Create vectorized environment
-    env = DummyVecEnv([make_env(log_dir, env_id, use_vlm=use_vlm)])
+    env = DummyVecEnv([make_env(log_dir, env_id, use_vlm=use_vlm, goal_prompt=goal_prompt)])
     
     # Wrap with video recorder
     env = VecVideoRecorder(
@@ -121,7 +115,7 @@ def train(wandb_key=None, project_name="minigrid-ppo", run_name=None, total_time
     )
     
     # Create evaluation environment
-    eval_env = DummyVecEnv([make_env(log_dir, env_id, use_vlm=use_vlm)])
+    eval_env = DummyVecEnv([make_env(log_dir, env_id, use_vlm=use_vlm, goal_prompt=goal_prompt)])
     
     # Define callbacks
     checkpoint_callback = CheckpointCallback(
@@ -257,14 +251,15 @@ if __name__ == "__main__":
                         help="W&B run name (auto-generated if not provided)")
     parser.add_argument("--timesteps", type=int, default=250000,
                         help="Total training timesteps")
-    parser.add_argument("--env_id", type=str, default="MiniGrid-LockedRoom-v0",
+    parser.add_argument("--env_id", type=str, default="MiniGrid-DoorKey-8x8-v0",
                         help="Minigrid Environment ID")
     parser.add_argument("--use_VLM", action='store_true',
                         help="Whether to use VLM-based reward shaping")
+    parser.add_argument("--goal_prompt", type=str, default="The agent finds the key first, then opens the door, then reaches the goal behind the door")
     
     args = parser.parse_args()
     
-    print("test")
+    print("test15")
     
     train(
         wandb_key=args.wandb_key,
@@ -273,4 +268,5 @@ if __name__ == "__main__":
         total_timesteps=args.timesteps,
         env_id=args.env_id,
         use_vlm=args.use_VLM,
+        goal_prompt = args.goal_prompt
     )

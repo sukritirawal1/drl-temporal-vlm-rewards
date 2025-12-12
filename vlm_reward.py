@@ -26,10 +26,15 @@ class CLIPRewardWrapper(gym.Wrapper):
         self._loaded = False
         self._disabled = False
         self._disabled_on_error = disabled_on_error
+        
+        self.clip_weight = 0.5
+        self.positive_delta_only = True
 
         self.clip_sim_score_t_minus_1 = 0.0
         self._goal_features = None
-
+        
+        print("TEST_WRAPPER1")
+        print(self.goal_prompt)
         print(f"CLIPRewardWrapper: initialized (model_id={model_id}) — lazy-loading model on first use. Device={DEVICE}")
 
     def _ensure_model_loaded(self):
@@ -41,7 +46,7 @@ class CLIPRewardWrapper(gym.Wrapper):
             print("CLIPRewardWrapper: loading model and processor... this may take a while")
 
             # Force weights_only=False to bypass the torch 2.3 security check
-            self._model = CLIPModel.from_pretrained(self.model_id, weights_only=False)
+            self._model = CLIPModel.from_pretrained(self.model_id)
             self._processor = CLIPProcessor.from_pretrained(self.model_id)
 
             try:
@@ -121,8 +126,11 @@ class CLIPRewardWrapper(gym.Wrapper):
         clip_sim_score_t = self._calculate_similarity(current_obs_features)
         temporal_delta_reward = clip_sim_score_t - self.clip_sim_score_t_minus_1
         self.clip_sim_score_t_minus_1 = clip_sim_score_t
+        
+        if self.positive_delta_only:
+            temporal_delta_reward = max(0.0, temporal_delta_reward)
 
-        new_reward = temporal_delta_reward
+        new_reward = original_reward + self.clip_weight * temporal_delta_reward
         
         info.setdefault('clip_sim_t', clip_sim_score_t)
         info.setdefault('clip_sim_t-1', self.clip_sim_score_t_minus_1)
